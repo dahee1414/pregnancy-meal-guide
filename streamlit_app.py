@@ -12,109 +12,203 @@ st.set_page_config(
 )
 
 # 서울과학고등학교 급식 정보 불러오기 함수
-def clean_menu_text(menu_str):
-    """NEIS 급식 메뉴 문자열 정리"""
-    menu_str = re.sub(r"<br\s*/?>", ", ", menu_str)
-    menu_str = re.sub(r"<[^>]+>", "", menu_str)
-    menu_str = re.sub(r"\([0-9.\s]+\)", "", menu_str)  # 알레르기 번호 제거
-    menu_str = menu_str.replace("&amp;", "&")
-    menu_str = re.sub(r"\s+", " ", menu_str)
-    return menu_str.strip(" ,")
+# 인증키 없이 공개 급식 조회 페이지를 크롤링하는 방식입니다.
+
+PUBLIC_SCHOOL_CODE = "7010084"      # 서울과학고등학교 공개 페이지 코드
+KOREACHARTS_SCHOOL_ID = "B000011789"
 
 
-def get_school_codes(school_name="서울과학고등학교"):
-    """학교명으로 NEIS 교육청 코드와 학교 코드를 찾습니다."""
-    try:
-        api_key = st.secrets.get("NEIS_API_KEY", "")
+def clean_food_line(line):
+    """급식 메뉴 한 줄 정리"""
+    line = line.strip()
+    line = re.sub(r"^[*•\-\s]+", "", line)        # 앞의 *, •, - 제거
+    line = re.sub(r"\([^)]*\)", "", line)         # 알레르기 번호, 괄호 설명 제거
+    line = re.sub(r"\s+", " ", line)
+    return line.strip()
 
-        if not api_key:
-            st.error("NEIS_API_KEY가 설정되어 있지 않습니다. Streamlit Secrets에 API 키를 넣어주세요.")
-            return None, None
 
-        url = "https://open.neis.go.kr/hub/schoolInfo"
-        params = {
-            "KEY": api_key,
-            "Type": "json",
-            "pIndex": "1",
-            "pSize": "10",
-            "SCHUL_NM": school_name,
-        }
+def is_not_menu_line(line):
+    """메뉴가 아닌 줄 거르기"""
+    skip_keywords = [
+        "급식인원수",
+        "칼로리",
+        "영양정보",
+        "탄수화물",
+        "단백질",
+        "지방",
+        "비타민",
+        "칼슘",
+        "철분",
+        "원산지정보",
+        "목록으로",
+        "학교 급식",
+        "검색",
+        "주소",
+        "전화번호",
+        "FAX",
+        "Copyright",
+    ]
+    return any(keyword in line for keyword in skip_keywords)
 
-        response = requests.get(url, params=params, timeout=10)
-        data = response.json()
 
-        if "schoolInfo" not in data:
-            st.error(f"학교 검색 실패: {data}")
-            return None, None
+def extract_meal_by_korean_date(page_text, target_date, meal_type="중식"):
+    """
+    예: '2026년 04월 24일 중식' 제목 아래의 메뉴를 추출합니다.
+    school.yourland.kr, lunch.ourstory.kr 같은 페이지에 대응합니다.
+    """
+    year = target_date.year
+    month = target_date.month
+    day = target_date.day
 
-        rows = data["schoolInfo"][1]["row"]
+    date_patterns = [
+        rf"{year}년\s*{month:02d}월\s*{day:02d}일\s*{meal_type}",
+        rf"{year}년\s*{month}월\s*{day}일\s*{meal_type}",
+    ]
 
-        # 정확히 서울과학고등학교인 행 우선 선택
-        for row in rows:
-            if row.get("SCHUL_NM") == school_name:
-                return row["ATPT_OFCDC_SC_CODE"], row["SD_SCHUL_CODE"]
+    lines = [
+        re.sub(r"\s+", " ", line).strip()
+        for line in page_text.split("\n")
+        if line.strip()
+    ]
 
-        # 정확한 이름이 없으면 첫 번째 결과 사용
-        row = rows[0]
-        return row["ATPT_OFCDC_SC_CODE"], row["SD_SCHUL_CODE"]
+    start_idx = None
 
-    except Exception as e:
-        st.error(f"학교 코드 조회 중 오류: {e}")
-        return None, None
+    for i, line in enumerate(lines):
+        if any(re.search(pattern, line) for pattern in date_patterns):
+            start_idx = i
+            break
+
+    if start_idx is None:
+        return None
+
+    menu_items = []
+
+    for line in lines[start_idx + 1:]:
+        # 다음 날짜의 조식/중식/석식이 나오면 종료
+        if re.search(r"20\d{2}년\s*\d{1,2}월\s*\d{1,2}일\s*(조식|중식|석식)", line):
+            break
+
+        # 급식인원수, 칼로리, 영양정보가 나오면 메뉴 구간 종료
+        if is_not_menu_line(line):
+            break
+
+        cleaned = clean_food_line(line)
+
+        if cleaned and len(cleaned) > 1:
+            menu_items.append(cleaned)
+
+    if menu_items:
+        return ", ".join(menu_items)
+
+    return None
+
+
+def extract_meal_from_koreacharts(page_text, target_date, meal_type="중식"):
+    """
+    koreacharts 월간 급식표 페이지에서 특정 날짜의 중식을 추출합니다.
+    """
+    day = target_date.day
+
+    # 월간 표에서 '8, 금요일' 같은 날짜 블록 찾기
+    block_pattern = rf"(?:^|\n)\s*{day}\s*,[^\n]*\n(.*?)(?=\n\s*\d{{1,2}}\s*,|\Z)"
+    block_match = re.search(block_pattern, page_text, flags=re.S)
+
+    if not block_match:
+        return None
+
+    block = block_match.group(1)
+
+    # 해당 날짜 블록 안에서 [중식]부터 다음 [조식]/[석식] 전까지 추출
+    meal_pattern = rf"\[{meal_type}\](.*?)(?=\n\s*\[(조식|중식|석식)\]|\Z)"
+    meal_match = re.search(meal_pattern, block, flags=re.S)
+
+    if not meal_match:
+        return None
+
+    meal_text = meal_match.group(1)
+
+    raw_items = [
+        item.strip()
+        for item in re.split(r"\n| {2,}", meal_text)
+        if item.strip()
+    ]
+
+    menu_items = []
+
+    for item in raw_items:
+        cleaned = clean_food_line(item)
+        if cleaned and not is_not_menu_line(cleaned):
+            menu_items.append(cleaned)
+
+    if menu_items:
+        return ", ".join(menu_items)
+
+    return None
+
+
+def get_public_page_text(url):
+    """공개 웹페이지 HTML을 텍스트로 변환"""
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    response = requests.get(url, headers=headers, timeout=10)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.content, "html.parser")
+    return soup.get_text("\n")
 
 
 def get_school_meal():
     """
-    서울과학고등학교 오늘 점심 급식 정보를 NEIS API에서 불러옵니다.
+    서울과학고등학교 오늘 점심 급식 정보를 인증키 없이 공개 웹페이지에서 불러옵니다.
     """
     try:
-        api_key = st.secrets.get("NEIS_API_KEY", "")
-
-        if not api_key:
-            st.error("NEIS_API_KEY가 설정되어 있지 않습니다. Streamlit Secrets에 API 키를 넣어주세요.")
-            return None
-
-        office_code, school_code = get_school_codes("서울과학고등학교")
-
-        if not office_code or not school_code:
-            return None
-
-        # 한국 시간 기준 날짜
+        # Streamlit 서버 시간이 해외 기준일 수 있으므로 한국 시간 기준 사용
         today = datetime.utcnow() + timedelta(hours=9)
-        today_str = today.strftime("%Y%m%d")
+        yyyymm = today.strftime("%Y%m")
 
-        url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
-        params = {
-            "KEY": api_key,
-            "Type": "json",
-            "pIndex": "1",
-            "pSize": "20",
-            "ATPT_OFCDC_SC_CODE": office_code,
-            "SD_SCHUL_CODE": school_code,
-            "MLSV_YMD": today_str,
-        }
+        public_urls = [
+            {
+                "name": "yourland",
+                "url": f"https://school.yourland.kr/food.php?code={PUBLIC_SCHOOL_CODE}",
+                "type": "korean_date",
+            },
+            {
+                "name": "ourstory",
+                "url": f"https://lunch.ourstory.kr/food.php?code={PUBLIC_SCHOOL_CODE}",
+                "type": "korean_date",
+            },
+            {
+                "name": "koreacharts",
+                "url": f"https://school.koreacharts.com/school/meals/{KOREACHARTS_SCHOOL_ID}/{yyyymm}.html",
+                "type": "koreacharts",
+            },
+        ]
 
-        response = requests.get(url, params=params, timeout=10)
-        data = response.json()
+        for source in public_urls:
+            try:
+                page_text = get_public_page_text(source["url"])
 
-        if "mealServiceDietInfo" not in data:
-            st.error(f"NEIS 급식 응답에 급식 정보가 없습니다: {data}")
-            return None
+                if source["type"] == "korean_date":
+                    menu = extract_meal_by_korean_date(page_text, today, "중식")
+                else:
+                    menu = extract_meal_from_koreacharts(page_text, today, "중식")
 
-        meals = data["mealServiceDietInfo"][1]["row"]
+                if menu:
+                    st.caption(f"급식 정보 출처: {source['name']}")
+                    return menu
 
-        for meal in meals:
-            if meal.get("MMEAL_SC_NM") == "중식":
-                menu_str = meal.get("DDISH_NM", "")
-                return clean_menu_text(menu_str)
+            except Exception as e:
+                # 한 사이트가 실패해도 다음 사이트를 계속 시도
+                continue
 
-        st.warning("오늘 급식 정보는 있지만 중식 데이터가 없습니다.")
+        st.error("공개 급식 페이지에서 오늘 중식 정보를 찾지 못했습니다. 주말, 방학, 급식 없는 날이거나 페이지 구조가 바뀌었을 수 있습니다.")
         return None
 
     except Exception as e:
         st.error(f"급식 정보 조회 중 오류: {e}")
         return None
-
 # 요일별 샘플 메뉴
 def get_sample_menu():
     """
