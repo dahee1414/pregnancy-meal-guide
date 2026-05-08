@@ -660,7 +660,24 @@ with tab1:
                 "calcium": calcium,
                 "dha": dha,
             })
+        # ===== 표로 한 번 더 요약 =====
+        st.subheader("📊 메뉴별 요약표")
 
+        summary_rows = []
+
+        for item in menu_results:
+            summary_rows.append({
+                "메뉴": item["menu"],
+                "판정": item["recommendation_level"],
+                "분류": item["matched_name"],
+                "칼로리": item["cal"],
+                "단백질(g)": item["protein"],
+                "철분(mg)": item["iron"],
+                "칼슘(mg)": item["calcium"],
+            })
+
+        st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+        
         # ===== 한눈에 보는 요약 =====
         st.subheader("🔎 한눈에 보는 오늘 급식")
 
@@ -757,23 +774,7 @@ with tab1:
                         unsafe_allow_html=True
                     )
 
-        # ===== 표로 한 번 더 요약 =====
-        st.subheader("📊 메뉴별 요약표")
 
-        summary_rows = []
-
-        for item in menu_results:
-            summary_rows.append({
-                "메뉴": item["menu"],
-                "판정": item["recommendation_level"],
-                "분류": item["matched_name"],
-                "칼로리": item["cal"],
-                "단백질(g)": item["protein"],
-                "철분(mg)": item["iron"],
-                "칼슘(mg)": item["calcium"],
-            })
-
-        st.dataframe(summary_rows, use_container_width=True, hide_index=True)
 
         # ===== 자세한 조언은 접어두기 =====
         with st.expander("🔍 메뉴별 자세한 조언 보기"):
