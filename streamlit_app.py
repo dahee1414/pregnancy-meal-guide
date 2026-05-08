@@ -627,11 +627,15 @@ with tab1:
             return "⭐⭐⭐ (보통)", "특별한 위험 식품은 아니지만, 전체 식단의 균형을 보며 적당히 드세요."
 
 
+        # 메뉴별 분석 결과를 먼저 모아두기
+        menu_results = []
+
         for menu in menus:
             if not menu.strip():
                 continue
 
             nutrition, matched_name = find_nutrition(menu)
+            recommendation_level, advice = get_menu_advice(menu)
 
             if nutrition:
                 cal, protein, iron, calcium, dha = nutrition
@@ -641,39 +645,151 @@ with tab1:
                 total_nutrition["철분"] += iron
                 total_nutrition["칼슘"] += calcium
                 total_nutrition["dha"] += dha
-
-                recommendation_level, advice = get_menu_advice(menu)
-
-                col1, col2 = st.columns([1, 2])
-
-                with col1:
-                    st.markdown(f"### {menu}")
-                    if matched_name and matched_name != menu:
-                        st.caption(f"분류: {matched_name}")
-
-                with col2:
-                    st.markdown(f"#### {recommendation_level}")
-
-                st.markdown(f"""
-**영양소 추정 정보:**
-- 칼로리: {cal} kcal
-- 단백질: {protein}g
-- 철분: {iron}mg
-- 칼슘: {calcium}mg
-- DHA: {dha}mg
-
-**💬 조언:** {advice}
-
----
-                """)
             else:
-                recommendation_level, advice = get_menu_advice(menu)
+                cal, protein, iron, calcium, dha = 0, 0, 0, 0, 0
+                matched_name = "분류 없음"
 
-                st.markdown(f"### {menu}")
-                st.markdown(f"#### {recommendation_level}")
-                st.info(f"💬 {advice}")
-                st.caption("정확한 영양소 데이터는 아직 없지만, 메뉴명 키워드를 바탕으로 조언을 표시했습니다.")
-                st.markdown("---")
+            menu_results.append({
+                "menu": menu,
+                "matched_name": matched_name,
+                "recommendation_level": recommendation_level,
+                "advice": advice,
+                "cal": cal,
+                "protein": protein,
+                "iron": iron,
+                "calcium": calcium,
+                "dha": dha,
+            })
+
+        # ===== 한눈에 보는 요약 =====
+        st.subheader("🔎 한눈에 보는 오늘 급식")
+
+        high_count = sum("적극 권장" in item["recommendation_level"] for item in menu_results)
+        good_count = sum("권장" in item["recommendation_level"] and "적극" not in item["recommendation_level"] for item in menu_results)
+        caution_count = sum("주의" in item["recommendation_level"] or "적당히" in item["recommendation_level"] for item in menu_results)
+        avoid_count = sum("피하기" in item["recommendation_level"] for item in menu_results)
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("적극 권장", f"{high_count}개")
+        with col2:
+            st.metric("권장", f"{good_count}개")
+        with col3:
+            st.metric("적당히/주의", f"{caution_count}개")
+        with col4:
+            st.metric("피하기", f"{avoid_count}개")
+
+        # 오늘의 한 줄 코멘트
+        if avoid_count > 0:
+            st.error("오늘 급식에는 피하는 것이 좋은 메뉴가 있습니다. 해당 메뉴는 대체하거나 섭취를 피하세요.")
+        elif caution_count > 0:
+            st.warning("오늘 급식은 대체로 괜찮지만, 일부 메뉴는 양을 조절해서 드세요.")
+        else:
+            st.success("오늘 급식은 임신 시기 기준으로 비교적 무난한 편입니다.")
+
+        st.divider()
+
+        # ===== 카드형 메뉴 표시 =====
+        st.subheader("📋 메뉴별 맞춤 조언")
+
+        cards_per_row = 3
+
+        for i in range(0, len(menu_results), cards_per_row):
+            cols = st.columns(cards_per_row)
+
+            for col, item in zip(cols, menu_results[i:i + cards_per_row]):
+                with col:
+                    # 추천도에 따른 배경색
+                    if "피하기" in item["recommendation_level"]:
+                        bg_color = "#ffe5e5"
+                        border_color = "#ff8a8a"
+                    elif "주의" in item["recommendation_level"] or "적당히" in item["recommendation_level"]:
+                        bg_color = "#fff7d6"
+                        border_color = "#ffd666"
+                    elif "적극 권장" in item["recommendation_level"]:
+                        bg_color = "#e6f7ec"
+                        border_color = "#74d99f"
+                    else:
+                        bg_color = "#eaf3ff"
+                        border_color = "#91caff"
+
+                    short_advice = item["advice"]
+                    if len(short_advice) > 55:
+                        short_advice = short_advice[:55] + "..."
+
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: {bg_color};
+                            border: 1px solid {border_color};
+                            border-radius: 16px;
+                            padding: 16px;
+                            min-height: 230px;
+                            margin-bottom: 14px;
+                        ">
+                            <h3 style="margin: 0 0 8px 0; font-size: 20px;">
+                                {item["menu"]}
+                            </h3>
+                            <div style="
+                                font-weight: 700;
+                                margin-bottom: 10px;
+                                color: #222;
+                            ">
+                                {item["recommendation_level"]}
+                            </div>
+                            <div style="font-size: 14px; line-height: 1.6;">
+                                <b>분류</b>: {item["matched_name"]}<br>
+                                <b>열량</b>: {item["cal"]} kcal<br>
+                                <b>단백질</b>: {item["protein"]}g<br>
+                                <b>철분</b>: {item["iron"]}mg<br>
+                                <b>칼슘</b>: {item["calcium"]}mg
+                            </div>
+                            <p style="
+                                margin-top: 12px;
+                                font-size: 14px;
+                                line-height: 1.5;
+                            ">
+                                💬 {short_advice}
+                            </p>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+        # ===== 표로 한 번 더 요약 =====
+        st.subheader("📊 메뉴별 요약표")
+
+        summary_rows = []
+
+        for item in menu_results:
+            summary_rows.append({
+                "메뉴": item["menu"],
+                "판정": item["recommendation_level"],
+                "분류": item["matched_name"],
+                "칼로리": item["cal"],
+                "단백질(g)": item["protein"],
+                "철분(mg)": item["iron"],
+                "칼슘(mg)": item["calcium"],
+            })
+
+        st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+
+        # ===== 자세한 조언은 접어두기 =====
+        with st.expander("🔍 메뉴별 자세한 조언 보기"):
+            for item in menu_results:
+                st.markdown(f"### {item['menu']}")
+                st.markdown(f"**판정:** {item['recommendation_level']}")
+                st.markdown(f"**분류:** {item['matched_name']}")
+                st.markdown(f"""
+- 칼로리: {item['cal']} kcal
+- 단백질: {item['protein']}g
+- 철분: {item['iron']}mg
+- 칼슘: {item['calcium']}mg
+- DHA: {item['dha']}mg
+                """)
+                st.markdown(f"**💬 조언:** {item['advice']}")
+                st.divider()
         
         # 총 영양소 요약
         st.subheader("📊 오늘의 총 영양소 섭취량")
