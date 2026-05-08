@@ -139,7 +139,7 @@ st.sidebar.title("📅 임신 정보")
 # 마지막 생리 시작일 입력
 last_period_date = st.sidebar.date_input(
     "마지막 생리 시작일",
-    value=datetime(2024, 4, 12),
+    value=datetime(2026, 4, 12),
     max_value=datetime.now()
 )
 
