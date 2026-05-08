@@ -474,42 +474,188 @@ with tab1:
             "dha": 0
         }
         
+        def normalize_menu_name(menu):
+            """메뉴명 정리: 공백, 괄호, 알레르기 번호 제거"""
+            menu = str(menu).strip()
+            menu = re.sub(r"\([^)]*\)", "", menu)
+            menu = re.sub(r"[0-9.]", "", menu)
+            menu = menu.replace(" ", "")
+            return menu.lower()
+
+
+        def find_nutrition(menu):
+            """
+            정확한 메뉴명이 없어도 키워드로 영양소를 추정합니다.
+            반환값: 영양정보, 매칭된 기준명
+            """
+            clean_menu = normalize_menu_name(menu)
+
+            # 1. 정확히 일치하는 경우
+            if clean_menu in nutrition_db:
+                return nutrition_db[clean_menu], clean_menu
+
+            # 2. 기존 nutrition_db 안에서 부분 일치 찾기
+            for key, value in nutrition_db.items():
+                clean_key = normalize_menu_name(key)
+                if clean_key in clean_menu or clean_menu in clean_key:
+                    return value, key
+
+            # 3. 급식 메뉴에 자주 나오는 일반 키워드로 추정
+            keyword_nutrition = [
+                {
+                    "keywords": ["스파게티", "파스타", "로제스파게티", "크림파스타", "토마토파스타"],
+                    "name": "파스타류",
+                    "nutrition": [420, 14.0, 1.8, 90, 0],
+                },
+                {
+                    "keywords": ["샐러드", "시트러스샐러드", "양상추", "채소샐러드"],
+                    "name": "샐러드류",
+                    "nutrition": [60, 1.5, 0.5, 35, 0],
+                },
+                {
+                    "keywords": ["닭다리", "닭고기", "치킨", "오븐구이", "닭"],
+                    "name": "닭고기류",
+                    "nutrition": [220, 27.0, 1.0, 25, 100],
+                },
+                {
+                    "keywords": ["감자", "회오리감자", "감자튀김", "웨지감자"],
+                    "name": "감자류",
+                    "nutrition": [180, 3.0, 0.8, 20, 0],
+                },
+                {
+                    "keywords": ["오이", "피클", "오이피클", "오이무침"],
+                    "name": "오이/피클류",
+                    "nutrition": [25, 0.8, 0.2, 20, 0],
+                },
+                {
+                    "keywords": ["코코리치", "음료", "주스", "푸딩", "젤리", "디저트"],
+                    "name": "음료/디저트류",
+                    "nutrition": [100, 0.5, 0.1, 20, 0],
+                },
+                {
+                    "keywords": ["밥", "쌀밥", "백미", "현미", "잡곡"],
+                    "name": "밥류",
+                    "nutrition": [200, 4.5, 0.5, 15, 0],
+                },
+                {
+                    "keywords": ["국", "탕", "찌개", "미역국", "된장국"],
+                    "name": "국/찌개류",
+                    "nutrition": [80, 5.0, 1.0, 60, 0],
+                },
+                {
+                    "keywords": ["생선", "고등어", "삼치", "연어", "생선까스"],
+                    "name": "생선류",
+                    "nutrition": [220, 22.0, 1.2, 50, 1000],
+                },
+                {
+                    "keywords": ["소고기", "쇠고기", "불고기", "장조림"],
+                    "name": "소고기류",
+                    "nutrition": [250, 26.0, 2.6, 25, 0],
+                },
+                {
+                    "keywords": ["돼지고기", "제육", "돈까스", "탕수육"],
+                    "name": "돼지고기류",
+                    "nutrition": [280, 24.0, 1.0, 30, 0],
+                },
+                {
+                    "keywords": ["계란", "달걀", "계란찜", "달걀말이", "오믈렛"],
+                    "name": "계란류",
+                    "nutrition": [160, 13.0, 2.5, 55, 150],
+                },
+                {
+                    "keywords": ["우유", "요구르트", "요거트", "치즈"],
+                    "name": "유제품류",
+                    "nutrition": [120, 5.0, 0.2, 180, 50],
+                },
+                {
+                    "keywords": ["김치", "깍두기", "배추김치"],
+                    "name": "김치류",
+                    "nutrition": [30, 1.2, 0.4, 35, 0],
+                },
+            ]
+
+            for item in keyword_nutrition:
+                if any(keyword in clean_menu for keyword in item["keywords"]):
+                    return item["nutrition"], item["name"]
+
+            return None, None
+
+
+        def get_menu_advice(menu):
+            """임신 시기별 메뉴 조언 생성"""
+            clean_menu = normalize_menu_name(menu)
+
+            # 피해야 할 메뉴
+            avoid_keywords = ["회", "육회", "날계란", "반숙", "생굴", "술", "알코올"]
+            if any(keyword in clean_menu for keyword in avoid_keywords):
+                return "⭐ (피하기)", "임신 중에는 식중독 위험을 줄이기 위해 날것이나 덜 익힌 음식은 피하는 것이 안전합니다."
+
+            # 주의 메뉴
+            caution_keywords = ["커피", "카페인", "콜라", "홍차", "녹차"]
+            salty_keywords = ["피클", "장아찌", "젓갈", "김치", "깍두기"]
+            fried_keywords = ["튀김", "감자튀김", "회오리감자", "돈까스", "치킨너겟"]
+
+            if any(keyword in clean_menu for keyword in caution_keywords):
+                return "⭐⭐ (주의)", "카페인 섭취량을 확인하세요. 임신 중에는 카페인을 과하게 섭취하지 않는 것이 좋습니다."
+
+            if any(keyword in clean_menu for keyword in salty_keywords):
+                return "⭐⭐⭐ (적당히)", "먹을 수 있지만 짠 음식일 수 있으므로 양을 조절하세요. 국물이나 절임류는 조금만 드시는 것이 좋습니다."
+
+            if any(keyword in clean_menu for keyword in fried_keywords):
+                return "⭐⭐⭐ (적당히)", "먹을 수 있지만 기름지거나 나트륨이 많을 수 있어 양을 조절하세요."
+
+            # 적극 권장 메뉴
+            high_keywords = ["닭", "소고기", "쇠고기", "돼지고기", "생선", "계란", "두부", "콩", "우유", "요구르트", "요거트", "치즈", "시금치", "브로콜리"]
+            if any(keyword in clean_menu for keyword in high_keywords):
+                if trimester_num == 1:
+                    return "⭐⭐⭐⭐⭐ (적극 권장)", "현재 임신 초기에는 단백질, 엽산, 철분을 챙기는 것이 좋습니다. 충분히 익힌 상태라면 좋은 선택입니다."
+                elif trimester_num == 2:
+                    return "⭐⭐⭐⭐⭐ (적극 권장)", "임신 중기에는 태아 성장에 필요한 단백질, 칼슘, 철분 섭취가 중요합니다."
+                else:
+                    return "⭐⭐⭐⭐⭐ (적극 권장)", "임신 후기에는 단백질과 철분을 꾸준히 챙기면 좋습니다."
+
+            # 채소/과일
+            vegetable_keywords = ["샐러드", "오이", "당근", "양배추", "상추", "나물", "과일", "사과", "오렌지", "딸기", "귤", "시트러스"]
+            if any(keyword in clean_menu for keyword in vegetable_keywords):
+                return "⭐⭐⭐⭐ (권장)", "비타민과 식이섬유 섭취에 도움이 됩니다. 다만 드레싱이나 절임류는 양을 조절하세요."
+
+            # 탄수화물 위주 메뉴
+            carb_keywords = ["밥", "스파게티", "파스타", "면", "빵", "감자"]
+            if any(keyword in clean_menu for keyword in carb_keywords):
+                return "⭐⭐⭐⭐ (권장)", "에너지 공급에 도움이 됩니다. 단백질 반찬이나 채소와 함께 먹으면 더 균형 잡힌 식사가 됩니다."
+
+            return "⭐⭐⭐ (보통)", "특별한 위험 식품은 아니지만, 전체 식단의 균형을 보며 적당히 드세요."
+
+
         for menu in menus:
-            menu_lower = menu.lower()
-            
-            # 데이터베이스에서 영양소 찾기
-            nutrition = nutrition_db.get(menu_lower, None)
-            
+            if not menu.strip():
+                continue
+
+            nutrition, matched_name = find_nutrition(menu)
+
             if nutrition:
                 cal, protein, iron, calcium, dha = nutrition
+
                 total_nutrition["칼로리"] += cal
                 total_nutrition["단백질"] += protein
                 total_nutrition["철분"] += iron
                 total_nutrition["칼슘"] += calcium
                 total_nutrition["dha"] += dha
-                
-                # 메뉴별 조언 결정
-                if menu_lower in recommendation_scores[trimester_num]["높은 권장"]:
-                    recommendation_level = "⭐⭐⭐⭐⭐ (적극 권장)"
-                    advice = f"현재 {trimester}의 필요 영양소가 풍부합니다. 충분히 섭취하세요!"
-                elif menu_lower in recommendation_scores[trimester_num]["권장"]:
-                    recommendation_level = "⭐⭐⭐⭐ (권장)"
-                    advice = "좋은 선택입니다. 적당량 섭취하세요."
-                elif menu_lower in recommendation_scores[trimester_num]["주의"]:
-                    recommendation_level = "⭐⭐ (주의)"
-                    advice = "과도하게 섭취하지 않도록 주의하세요."
-                else:
-                    recommendation_level = "⭐ (피하기)"
-                    advice = "현재 임신 중에는 섭취를 피하는 것이 좋습니다."
-                
+
+                recommendation_level, advice = get_menu_advice(menu)
+
                 col1, col2 = st.columns([1, 2])
+
                 with col1:
                     st.markdown(f"### {menu}")
+                    if matched_name and matched_name != menu:
+                        st.caption(f"분류: {matched_name}")
+
                 with col2:
                     st.markdown(f"#### {recommendation_level}")
-                
+
                 st.markdown(f"""
-**영양소 정보:**
+**영양소 추정 정보:**
 - 칼로리: {cal} kcal
 - 단백질: {protein}g
 - 철분: {iron}mg
@@ -521,7 +667,13 @@ with tab1:
 ---
                 """)
             else:
-                st.warning(f"❓ '{menu}'에 대한 데이터가 없습니다.")
+                recommendation_level, advice = get_menu_advice(menu)
+
+                st.markdown(f"### {menu}")
+                st.markdown(f"#### {recommendation_level}")
+                st.info(f"💬 {advice}")
+                st.caption("정확한 영양소 데이터는 아직 없지만, 메뉴명 키워드를 바탕으로 조언을 표시했습니다.")
+                st.markdown("---")
         
         # 총 영양소 요약
         st.subheader("📊 오늘의 총 영양소 섭취량")
