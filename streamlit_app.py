@@ -12,50 +12,108 @@ st.set_page_config(
 )
 
 # 서울과학고등학교 급식 정보 불러오기 함수
+def clean_menu_text(menu_str):
+    """NEIS 급식 메뉴 문자열 정리"""
+    menu_str = re.sub(r"<br\s*/?>", ", ", menu_str)
+    menu_str = re.sub(r"<[^>]+>", "", menu_str)
+    menu_str = re.sub(r"\([0-9.\s]+\)", "", menu_str)  # 알레르기 번호 제거
+    menu_str = menu_str.replace("&amp;", "&")
+    menu_str = re.sub(r"\s+", " ", menu_str)
+    return menu_str.strip(" ,")
+
+
+def get_school_codes(school_name="서울과학고등학교"):
+    """학교명으로 NEIS 교육청 코드와 학교 코드를 찾습니다."""
+    try:
+        api_key = st.secrets.get("NEIS_API_KEY", "")
+
+        if not api_key:
+            st.error("NEIS_API_KEY가 설정되어 있지 않습니다. Streamlit Secrets에 API 키를 넣어주세요.")
+            return None, None
+
+        url = "https://open.neis.go.kr/hub/schoolInfo"
+        params = {
+            "KEY": api_key,
+            "Type": "json",
+            "pIndex": "1",
+            "pSize": "10",
+            "SCHUL_NM": school_name,
+        }
+
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+
+        if "schoolInfo" not in data:
+            st.error(f"학교 검색 실패: {data}")
+            return None, None
+
+        rows = data["schoolInfo"][1]["row"]
+
+        # 정확히 서울과학고등학교인 행 우선 선택
+        for row in rows:
+            if row.get("SCHUL_NM") == school_name:
+                return row["ATPT_OFCDC_SC_CODE"], row["SD_SCHUL_CODE"]
+
+        # 정확한 이름이 없으면 첫 번째 결과 사용
+        row = rows[0]
+        return row["ATPT_OFCDC_SC_CODE"], row["SD_SCHUL_CODE"]
+
+    except Exception as e:
+        st.error(f"학교 코드 조회 중 오류: {e}")
+        return None, None
+
+
 def get_school_meal():
     """
-    서울과학고등학교 급식 정보를 불러옵니다.
-    NEIS API 또는 웹 크롤링을 시도합니다.
+    서울과학고등학교 오늘 점심 급식 정보를 NEIS API에서 불러옵니다.
     """
     try:
-        # NEIS 교육청 API 시도
-        # 서울과학고등학교 코드: 7010001
-        school_code = "7010001"
-        today = datetime.now().strftime("%Y%m%d")
-        
-        # NEIS API URL (공개 API 예시)
-        url = f"https://open.neis.go.kr/hub/mealServiceDietInfo?KEY=YOUR_API_KEY&Type=json&pindex=1&psize=100&ATPT_OFCDC_SC_CODE=10&SD_SCHUL_CODE={school_code}&MLSV_YMD={today}"
-        
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if 'mealServiceDietInfo' in data:
-                meals = data['mealServiceDietInfo'][1]['row']
-                for meal in meals:
-                    if meal.get('MMEAL_SC_NM') == '중식':  # 점심
-                        menu_str = meal.get('DDISH_NM', '')
-                        # HTML 태그 제거
-                        menu_str = re.sub(r'<[^>]+>', '', menu_str)
-                        # 특수 문자 정리
-                        menu_str = menu_str.replace('\n', ', ').strip()
-                        return menu_str
-    except:
-        pass
-    
-    # 웹사이트 크롤링 시도
-    try:
-        url = "https://www.sshs.hs.kr/"  # 서울과학고 웹사이트
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            # 급식 정보를 찾는 로직 (학교 웹사이트 구조에 따라 조정 필요)
-            meal_info = soup.find(class_=re.compile(r'meal|lunch|급식', re.I))
-            if meal_info:
-                return meal_info.get_text(strip=True)
-    except:
-        pass
-    
-    return None
+        api_key = st.secrets.get("NEIS_API_KEY", "")
+
+        if not api_key:
+            st.error("NEIS_API_KEY가 설정되어 있지 않습니다. Streamlit Secrets에 API 키를 넣어주세요.")
+            return None
+
+        office_code, school_code = get_school_codes("서울과학고등학교")
+
+        if not office_code or not school_code:
+            return None
+
+        # 한국 시간 기준 날짜
+        today = datetime.utcnow() + timedelta(hours=9)
+        today_str = today.strftime("%Y%m%d")
+
+        url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
+        params = {
+            "KEY": api_key,
+            "Type": "json",
+            "pIndex": "1",
+            "pSize": "20",
+            "ATPT_OFCDC_SC_CODE": office_code,
+            "SD_SCHUL_CODE": school_code,
+            "MLSV_YMD": today_str,
+        }
+
+        response = requests.get(url, params=params, timeout=10)
+        data = response.json()
+
+        if "mealServiceDietInfo" not in data:
+            st.error(f"NEIS 급식 응답에 급식 정보가 없습니다: {data}")
+            return None
+
+        meals = data["mealServiceDietInfo"][1]["row"]
+
+        for meal in meals:
+            if meal.get("MMEAL_SC_NM") == "중식":
+                menu_str = meal.get("DDISH_NM", "")
+                return clean_menu_text(menu_str)
+
+        st.warning("오늘 급식 정보는 있지만 중식 데이터가 없습니다.")
+        return None
+
+    except Exception as e:
+        st.error(f"급식 정보 조회 중 오류: {e}")
+        return None
 
 # 요일별 샘플 메뉴
 def get_sample_menu():
