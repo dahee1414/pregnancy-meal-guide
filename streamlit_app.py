@@ -525,7 +525,20 @@ with tab1:
             반환값: 영양정보, 매칭된 기준명
             """
             clean_menu = normalize_menu_name(menu)
+        def is_soup_or_stew(clean_menu):
+    """국/찌개/탕류 판정: 단어 끝이 국, 찌개, 탕인 경우만"""
+    
+    # 예외: 탕이 들어가지만 국물 음식이 아닌 메뉴
+            soup_exceptions = ["탕수육", "찹쌀탕수육", "탕후루"]
 
+        if any(exception in clean_menu for exception in soup_exceptions):
+        return False
+
+        return (
+            clean_menu.endswith("국")
+            or clean_menu.endswith("찌개")
+            or clean_menu.endswith("탕")
+        )
             # 1. 정확히 일치하는 경우
             if clean_menu in nutrition_db:
                 return nutrition_db[clean_menu], clean_menu
@@ -535,8 +548,12 @@ with tab1:
                 clean_key = normalize_menu_name(key)
                 if clean_key in clean_menu or clean_menu in clean_key:
                     return value, key
+                    
+             # 3. 국/찌개/탕류는 '포함'이 아니라 '마지막 글자' 기준으로 분류
+            if is_soup_or_stew(clean_menu):
+                return [80, 5.0, 1.0, 60, 0], "국/찌개류"
 
-            # 3. 급식 메뉴에 자주 나오는 일반 키워드로 추정
+            # 4. 급식 메뉴에 자주 나오는 일반 키워드로 추정
             keyword_nutrition = [
                 {
                     "keywords": ["쭈꾸미삼겹살", "주꾸미삼겹살", "쭈삼", "주삼"],
@@ -644,7 +661,7 @@ with tab1:
                     "nutrition": [200, 4.5, 0.5, 15, 0],
                 },
                 {
-                    "keywords": ["국", "탕", "찌개", "미역국", "된장국"],
+                    "keywords": ["미역국", "된장국", "계란국", "감자국", "콩나물국", "어묵국", "김치찌개", "된장찌개", "순두부찌개", "부대찌개", "갈비탕", "설렁탕", "곰탕", "삼계탕", "육개장"],
                     "name": "국/찌개류",
                     "nutrition": [80, 5.0, 1.0, 60, 0],
                 },
