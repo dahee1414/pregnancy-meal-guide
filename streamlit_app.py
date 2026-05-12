@@ -532,7 +532,7 @@ with tab1:
             soup_exceptions = ["탕수육", "찹쌀탕수육", "탕후루"]
 
         if any(exception in clean_menu for exception in soup_exceptions):
-        return False
+            return False
 
         return (
             clean_menu.endswith("국")
