@@ -526,9 +526,9 @@ with tab1:
             """
             clean_menu = normalize_menu_name(menu)
         def is_soup_or_stew(clean_menu):
-    """국/찌개/탕류 판정: 단어 끝이 국, 찌개, 탕인 경우만"""
+            """국/찌개/탕류 판정: 단어 끝이 국, 찌개, 탕인 경우만"""
     
-    # 예외: 탕이 들어가지만 국물 음식이 아닌 메뉴
+            # 예외: 탕이 들어가지만 국물 음식이 아닌 메뉴
             soup_exceptions = ["탕수육", "찹쌀탕수육", "탕후루"]
 
         if any(exception in clean_menu for exception in soup_exceptions):
