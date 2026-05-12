@@ -525,20 +525,20 @@ with tab1:
             반환값: 영양정보, 매칭된 기준명
             """
             clean_menu = normalize_menu_name(menu)
-        def is_soup_or_stew(clean_menu):
-            """국/찌개/탕류 판정: 단어 끝이 국, 찌개, 탕인 경우만"""
+            def is_soup_or_stew(clean_menu):
+                """국/찌개/탕류 판정: 단어 끝이 국, 찌개, 탕인 경우만"""
     
-            # 예외: 탕이 들어가지만 국물 음식이 아닌 메뉴
-            soup_exceptions = ["탕수육", "찹쌀탕수육", "탕후루"]
+                # 예외: 탕이 들어가지만 국물 음식이 아닌 메뉴
+                soup_exceptions = ["탕수육", "찹쌀탕수육", "탕후루"]
 
-        if any(exception in clean_menu for exception in soup_exceptions):
-            return False
+                if any(exception in clean_menu for exception in soup_exceptions):
+                    return False
 
-        return (
-            clean_menu.endswith("국")
-            or clean_menu.endswith("찌개")
-            or clean_menu.endswith("탕")
-        )
+                return (
+                    clean_menu.endswith("국")
+                    or clean_menu.endswith("찌개")
+                    or clean_menu.endswith("탕")
+                )
             # 1. 정확히 일치하는 경우
             if clean_menu in nutrition_db:
                 return nutrition_db[clean_menu], clean_menu
