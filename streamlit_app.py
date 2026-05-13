@@ -525,6 +525,54 @@ with tab1:
             반환값: 영양정보, 매칭된 기준명
             """
             clean_menu = normalize_menu_name(menu)
+            
+            # 0. 구체적인 복합 메뉴는 일반 키워드보다 먼저 분류
+            specific_nutrition_rules = [
+                {
+                    "keywords": ["치즈돈까스", "치즈돈가스", "치즈돈까스소스", "치즈돈가스소스"],
+                    "name": "치즈돈까스류",
+                    "nutrition": [430, 24.0, 1.2, 150, 0],
+                },
+                {
+                    "keywords": ["돈까스", "돈가스", "수제돈까스", "등심돈까스"],
+                    "name": "돈까스류",
+                    "nutrition": [380, 25.0, 1.2, 50, 0],
+                },
+                {
+                    "keywords": ["김치볶음밥", "김치볶음밥계란", "김치볶음밥볶음"],
+                    "name": "김치볶음밥류",
+                    "nutrition": [420, 10.0, 1.5, 45, 0],
+                },
+                {
+                    "keywords": ["볶음밥", "새우볶음밥", "야채볶음밥", "햄볶음밥", "계란볶음밥"],
+                    "name": "볶음밥류",
+                    "nutrition": [400, 10.0, 1.2, 40, 0],
+                },
+                {
+                    "keywords": ["비빔밥", "나물비빔밥", "산채비빔밥"],
+                    "name": "비빔밥류",
+                    "nutrition": [450, 13.0, 2.0, 80, 0],
+                },
+                {
+                    "keywords": ["오므라이스", "하이라이스", "카레라이스", "짜장밥", "덮밥"],
+                    "name": "덮밥/라이스류",
+                    "nutrition": [500, 14.0, 1.8, 70, 0],
+                },
+                {
+                    "keywords": ["미니우동", "우동", "유부우동", "어묵우동", "가락국수"],
+                    "name": "우동류",
+                    "nutrition": [300, 9.0, 1.0, 45, 0],
+                },
+                {
+                    "keywords": ["국수", "잔치국수", "비빔국수", "칼국수", "쌀국수"],
+                    "name": "면류",
+                    "nutrition": [350, 10.0, 1.2, 50, 0],
+                },
+            ]
+
+            for item in specific_nutrition_rules:
+                if any(keyword in clean_menu for keyword in item["keywords"]):
+                    return item["nutrition"], item["name"]
             def is_soup_or_stew(clean_menu):
                 """국/찌개/탕류 판정: 단어 끝이 국, 찌개, 탕인 경우만"""
     
@@ -546,7 +594,15 @@ with tab1:
             # 2. 기존 nutrition_db 안에서 부분 일치 찾기
             for key, value in nutrition_db.items():
                 clean_key = normalize_menu_name(key)
-                if clean_key in clean_menu or clean_menu in clean_key:
+
+                # 너무 넓은 키워드는 부분 일치에서 제외
+                # 예: 김치볶음밥이 '밥'으로, 치즈돈까스가 '치즈'로 잡히는 문제 방지
+                too_generic_keys = ["밥", "국", "탕", "면", "치즈", "김치", "우유"]
+
+                if clean_key in too_generic_keys:
+                    continue
+
+                if len(clean_key) >= 3 and (clean_key in clean_menu or clean_menu in clean_key):
                     return value, key
                     
             # 마라탕은 일반 국/찌개류보다 먼저 따로 분류
@@ -725,6 +781,21 @@ with tab1:
             if "마라탕" in clean_menu:
                 return "⭐⭐⭐ (적당히)", "마라탕은 고기, 두부, 채소가 들어가면 단백질과 식이섬유 섭취에 도움이 될 수 있지만, 국물의 나트륨과 매운 양념이 많을 수 있습니다. 임신 중 속쓰림이나 부종이 걱정된다면 건더기 위주로 먹고 국물은 적게 드세요."
 
+            if "치즈돈까스" in clean_menu or "치즈돈가스" in clean_menu:
+                return "⭐⭐⭐ (적당히)", "치즈돈까스는 단백질과 칼슘 섭취에 도움이 될 수 있지만 튀김류라 지방과 나트륨이 많을 수 있습니다. 소스는 적당히 먹고 채소 반찬과 함께 드세요."
+
+            if "돈까스" in clean_menu or "돈가스" in clean_menu:
+                return "⭐⭐⭐ (적당히)", "돈까스는 단백질을 섭취할 수 있지만 튀김류라 기름진 편입니다. 속쓰림이 있으면 양을 조절하세요."
+
+            if "김치볶음밥" in clean_menu:
+                return "⭐⭐⭐ (적당히)", "김치볶음밥은 에너지 공급에는 좋지만 김치와 양념 때문에 나트륨이 많을 수 있습니다. 단백질 반찬이나 채소와 함께 먹으면 더 균형 잡힌 식사가 됩니다."
+
+            if "볶음밥" in clean_menu:
+                return "⭐⭐⭐ (적당히)", "볶음밥은 에너지 공급에는 좋지만 기름과 나트륨이 많을 수 있습니다. 채소나 단백질 반찬과 함께 드세요."
+
+            if "미니우동" in clean_menu or "우동" in clean_menu:
+                return "⭐⭐⭐ (적당히)", "우동은 먹을 수 있지만 면과 국물 위주의 메뉴라 나트륨이 많을 수 있습니다. 국물은 적게 먹고, 단백질 반찬이나 채소를 함께 챙기면 좋습니다."
+            
             # 주의 메뉴
             caution_keywords = ["커피", "카페인", "콜라", "홍차", "녹차"]
             salty_keywords = ["피클", "장아찌", "젓갈", "김치", "깍두기", "단무지", "짜사이", "자차이", "쌈장", "된장", "고추장"]
@@ -787,8 +858,10 @@ with tab1:
                 return "⭐⭐⭐⭐ (권장)", "비타민과 식이섬유 섭취에 도움이 됩니다. 다만 드레싱이나 절임류는 양을 조절하세요."
 
             # 탄수화물 위주 메뉴
-            carb_keywords = ["밥", "스파게티", "파스타", "면", "빵", "감자"]
-            if any(keyword in clean_menu for keyword in carb_keywords):
+            carb_keywords = ["스파게티", "파스타", "면", "빵", "감자", "우동", "국수"]
+            plain_rice_names = ["밥", "쌀밥", "흰쌀밥", "백미밥", "잡곡밥", "현미밥", "보리밥"]
+
+            if clean_menu in plain_rice_names or any(keyword in clean_menu for keyword in carb_keywords):
                 return "⭐⭐⭐⭐ (권장)", "에너지 공급에 도움이 됩니다. 단백질 반찬이나 채소와 함께 먹으면 더 균형 잡힌 식사가 됩니다."
 
             return "⭐⭐⭐ (보통)", "특별한 위험 식품은 아니지만, 전체 식단의 균형을 보며 적당히 드세요."
