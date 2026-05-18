@@ -578,6 +578,16 @@ with tab1:
                     "name": "면류",
                     "nutrition": [350, 10.0, 1.2, 50, 0],
                 },
+                {
+                    "keywords": ["김자반", "김가루자반", "돌자반", "자반김"],
+                    "name": "김자반류",
+                    "nutrition": [70, 3.0, 1.0, 40, 100],
+                },
+                {
+                    "keywords": ["떡갈비구이", "떡갈비", "수제떡갈비", "떡갈비조림"],
+                    "name": "떡갈비구이류",
+                    "nutrition": [320, 18.0, 1.8, 35, 0],
+                },
             ]
 
             for item in specific_nutrition_rules:
@@ -839,6 +849,12 @@ with tab1:
 
             if "유린기" in clean_menu:
                 return "⭐⭐⭐ (적당히)", "유린기는 닭고기 단백질을 섭취할 수 있지만, 튀기거나 기름에 조리한 닭고기에 새콤달콤한 소스가 더해져 당과 나트륨이 많을 수 있습니다. 채소 반찬과 함께 적당량 드세요."
+
+            if "김자반" in clean_menu or "김가루자반" in clean_menu or "돌자반" in clean_menu or "자반김" in clean_menu:
+                return "⭐⭐⭐ (적당히)", "김자반은 김의 무기질 섭취에 도움이 될 수 있지만, 조미된 반찬이라 나트륨이 많을 수 있습니다. 밥에 곁들이는 정도로 조금만 드세요."
+
+            if "떡갈비구이" in clean_menu or "떡갈비" in clean_menu:
+                return "⭐⭐⭐ (적당히)", "떡갈비구이는 단백질 섭취에 도움이 될 수 있지만, 양념육이라 당과 나트륨이 많을 수 있습니다. 채소 반찬과 함께 적당량 드세요."
             
             if "애호박부추전" in clean_menu or "호박부추전" in clean_menu or "애호박전" in clean_menu or "부추전" in clean_menu:
                 return "⭐⭐⭐ (적당히)", "애호박과 부추가 들어가 비타민과 식이섬유 섭취에 도움이 될 수 있습니다. 다만 전류는 기름에 부친 음식이라 많이 먹기보다 적당량 드세요."
